@@ -24,12 +24,10 @@ It also has the following functions:
 |Function | Description |
 |----      | ----        |
 |summary()     | Prints short summary of crystallographic info|
-|ticksWS(yVal) | Creates a mantid workspace containing points at values of d-spacings and heights yVal|
-|plot()*        | Creates a mantid plot with tick marks at positions of d-spacings | 
+|ticksWS(_yval_) | Creates a mantid workspace containing points at values of d-spacings and heights yVal|
+|plot()        | Creates a mantid plot with tick marks at positions of d-spacings | 
 |scaleLattice(float)  | Multiplies lattice parameters by constant `float`, recalculates d-spacings and updates plot|
 |resetLattice()       | Returns lattice to original values in cif file|
-
-(*Plot output can be tweaked with attributes `markerHeight` and `markeredgecolor`)
 
 ## Setting up 
 
