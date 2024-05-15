@@ -7,13 +7,15 @@ import matplotlib.pyplot as plt
 from mantid.plots.utility import MantidAxType
 from mantid.api import AnalysisDataService as ADS
 
+defaultCifFolder = '/SNS/SNAP/shared/cifLibrary'
+
 class Box:
 
     '''class to hold list of peaks and their properties'''
 
     def __init__(self,cif):
  
-        self.defaultCifFolder = '/SNS/SNAP/shared/cifLibrary'
+        self.defaultCifFolder = defaultCifFolder
         self.cifSpec = cif
         self.nickName = ''
 
@@ -263,3 +265,11 @@ class Box:
         legend = axes.legend(fontsize=8.0).set_draggable(True).legend
 
         plt.show()
+
+def showNicknames():
+    print('available nicknames are:')
+    with open(f"{defaultCifFolder}/nickNames.csv", mode = 'r') as file:
+        csvFile = csv.reader(file)
+        for line in csvFile:
+            print(line[0].lower())
+
