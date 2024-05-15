@@ -17,7 +17,7 @@ Once instantiated, via a CIF (Crystallographic Information File), a Box holds us
 |dSpacing  | list of d-spacings |
 |fSq       | list of structure factors|
 |mult      | list of multiplicities   |
-|estInt    | list of estimated intendities|
+|estInt    | list of estimated intensities|
 
 It also has the following functions:
 
