@@ -104,4 +104,7 @@ sample1.markerHeight = 15
 sample1.markerColor = 'blue'
 sample1.plot()
 ```
-In mantid workbench you can then drag one or more workspaces containing diffraction data onto the plot workspace
+In mantid workbench you can then drag one or more workspaces containing diffraction data onto the plot workspace. An example of the output is shown below:
+
+![image](https://github.com/mguthriem/crystalBox/assets/90723788/0207025e-0062-4733-a718-9c0964899423)
+
