@@ -1,6 +1,6 @@
 # crystalBox
 
-Contains a useful class `Box` for crystalline materials using mantid
+Contains a useful class `Box` for holding crystallographic values derived from a CIF file
 
 ## Use case
 
