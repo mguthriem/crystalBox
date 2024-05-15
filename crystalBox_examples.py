@@ -29,30 +29,36 @@ print(diamond.summary())
 
 print("\nThese are d-spacings for nickel:")
 for i in range(nickel.nRef):
-    print(f"{nickel.dspacing[i]:.4f}")
+    print(f"{nickel.dSpacing[i]:.4f}")
 
 #4. you also have these other useful numbers:
 
 print("\nYou can also get: hkl, d-spacing multiplicity and estimated intensity. e.g. for NAC:")
 for i in range(10):
-    print(f"{i} {NAC.hkl[i]} {NAC.dspacing[i]:.4f} {NAC.fsq[i]:.1f} {NAC.mult[i]} {NAC.estInt[i]:.1f}")
+    print(f"{i} {NAC.hkl[i]} {NAC.dSpacing[i]:.4f} {NAC.fSq[i]:.1f} {NAC.mult[i]} {NAC.estInt[i]:.1f}")
     
-#5. You can create a workspace with ticks using:
+#5. You can apply a simple linear scaling to the lattice parameters using
 
-diamond.tickWS(0.1) #the value in brackets is the height of the tick marks
-print(f"\njust created workspace \'ticks: diamond\' with diamond peak positions")
-
-#(annoyingly, mantid workbench displays as a line, you have to edit plot settings to get tick marks)
-
-#6. You can apply a simple linear scaling to the lattice parameters using
-
-print(f"\noriginal nickel lattice param: {nickel.a:.4f}")
-
-nickel.scaleLattice(0.99)
-
-print(f"nickel lattice param scaled by 0.99: {nickel.a:.4f}")
+print(f"\noriginal nickel lattice param: {nickel.a:.4f} Ang, vol = {nickel.volume:.4f} Ang^3")
+sf = 0.75
+nickel.scaleLattice(sf)
+print(f"nickel lattice param scaled by {sf}: {nickel.a:.4f} Ang, vol = {nickel.volume:.4f} Ang^3")
 
 nickel.resetLattice()
 
-print(f"reset nickel lattice param: {nickel.a:.4f}")
+print(f"reset nickel lattice param: {nickel.a:.4f} Ang, vol = {nickel.volume:.4f} Ang^3")
+print(nickel.dSpacing)
 
+#6. You can create a workspace with ticks using
+
+print(f"\nNow creating workspace \'ticks: diamond\' with diamond peak positions")
+diamond.tickWS(-0.01) #the value in brackets is the height of the tick marks
+
+#and then plot is using
+
+diamond.plot()
+
+#you can then drag diffraction data onto that plot
+
+LoadNexus(Filename='/SNS/SNAP/shared/Malcolm/code/crystalBox/data/diamond.nxs',
+    OutputWorkspace='diamond')

@@ -1,10 +1,11 @@
-# some useful generation/packaging of crystallographic info using mantid 
 import csv
 import os
 from mantid.simpleapi import *
-# import matplotlib.pyplot as plt
 import numpy as np
 from mantid.geometry import CrystalStructure, ReflectionGenerator, ReflectionConditionFilter
+import matplotlib.pyplot as plt
+from mantid.plots.utility import MantidAxType
+from mantid.api import AnalysisDataService as ADS
 
 class Box:
 
@@ -23,10 +24,16 @@ class Box:
 
         self.dMin = 0.5
         self.dMax = 100
-
-        #use mantid to derive crystallographic properties of peaks from cif
+ 
+        self.modifiedLattice = False # if false allows scaling of lattice
         if self.validCif:
             self.loadCif()
+
+        self.tickWSExists = False
+
+        #plotting attributes
+        self.markerHeight = 10
+        self.markeredgecolor='red'
 
 
     def findCif(self):
@@ -39,7 +46,7 @@ class Box:
             # stored in defaultCifFolder
             nickName=[]
             cifFilename=[]
-            with open(f"{self.defaultCifFolder}/cifIndex.csv", mode = 'r') as file:
+            with open(f"{self.defaultCifFolder}/nickNames.csv", mode = 'r') as file:
                 csvFile = csv.reader(file)
                 for line in csvFile:
                     nickName.append(line[0].lower()) #enforce lower case
@@ -91,10 +98,31 @@ class Box:
         CreateSampleWorkspace(OutputWorkspace='tmp')
         LoadCIF(Workspace='tmp',InputFile=self.cifFilePath)
         ws = mtd['tmp']
-        crystal = ws.sample().getCrystalStructure()
+        self.crystal_orig = ws.sample().getCrystalStructure()
+
+        #get scatterers
+        self.scatterers = self.crystal_orig.getScatterers()
+
+        self.processCrystal(self.crystal_orig)
+        # current values for lattice params are fresh from cif and unmodified. Keep a copy of these
+        self.a_orig = self.a
+        self.b_orig = self.b
+        self.c_orig = self.c
+        self.alpha_orig = self.alpha
+        self.beta_orig = self.beta
+        self.gamma_orig = self.gamma
+
+        DeleteWorkspace(Workspace='tmp')
+        
+    def processCrystal(self,crystal):
+   
         unitCell = crystal.getUnitCell()
 
-        # define useful unit cell parameters
+        # some symmetry parameters
+        self.HMSymbol = crystal.getSpaceGroup().getHMSymbol()
+        self.pointGroup = crystal.getSpaceGroup().getPointGroup()
+        
+        #define useful crystallographic attributes
         self.a = unitCell.a()
         self.b = unitCell.b()
         self.c = unitCell.c()
@@ -102,15 +130,7 @@ class Box:
         self.beta = unitCell.beta() 
         self.gamma = unitCell.gamma()
         self.volume = unitCell.volume()
-
-        #keep a copy of lattice parameters in case they get scaled
-        self.a_orig = unitCell.a()
-        self.b_orig = unitCell.b()
-        self.c_orig = unitCell.c()
-        # some symmetry parameters
-
-        self.HMSymbol = crystal.getSpaceGroup().getHMSymbol()
-        
+                
         #Generate reflections
         generator = ReflectionGenerator(crystal)
         # Create list of unique reflections between 0.7 and 3.0 Angstrom
@@ -118,8 +138,7 @@ class Box:
         # Calculate d and F^2
         dValues = generator.getDValues(hkls)
         fSquared = generator.getFsSquared(hkls)
-        self.pointGroup = crystal.getSpaceGroup().getPointGroup()
-
+        
         # Make list of tuples and sort by d-values, descending, include point group for multiplicity.
         reflections = sorted([(hkl, d, fsq, len(self.pointGroup.getEquivalents(hkl))) for hkl, d, fsq in zip(hkls, dValues, fSquared)],
                                     key=lambda x: x[1] - x[0][0]*1e-6, reverse=True)
@@ -128,19 +147,18 @@ class Box:
 
         self.nRef = len(reflections)
         self.hkl = []
-        self.dspacing = []
-        self.fsq = []
+        self.dSpacing = []
+        self.fSq = []
         self.mult = []
         self.estInt = []
         for i in range(self.nRef):
             self.hkl.append(reflections[i][0])
-            self.dspacing.append(reflections[i][1])
-            self.fsq.append(reflections[i][2])
+            self.dSpacing.append(reflections[i][1])
+            self.fSq.append(reflections[i][2])
             self.mult.append(reflections[i][3])
             Amp = reflections[i][2]*reflections[i][3]*reflections[i][1]**4 #Fsq times multiplicity * d**4
             self.estInt.append(Amp)
-
-        DeleteWorkspace(Workspace='tmp')
+        
 
     def summary(self):
         print(f"\nCIF file: {self.cifFilePath}")
@@ -151,31 +169,97 @@ class Box:
         print(f"{self.nRef} reflections calculated")
         print(f"First 10 reflections:")
         for ref in range(self.nRef):
-            print(f"{self.hkl[ref]} {self.dspacing[ref]:4f} {self.mult[ref]} {self.estInt[ref]:.4f}")
+            print(f"{self.hkl[ref]} {self.dSpacing[ref]:4f} {self.mult[ref]} {self.fSq[ref]:.4f}")
 
     def tickWS(self,yVal):
-        
-        self.tickWSName = f"ticks: {self.nickName}"
 
-        dataXArray = np.array(self.dspacing)
-        dataYArray = np.ones_like(dataXArray)*yVal
+        self.tickWSExists = True
+        self.tickWSName = f"ticks: {self.nickName}"
+        self.tickWSyVal = yVal
+
+        dataXArray = np.array(self.dSpacing)
+        dataYArray = np.ones_like(dataXArray)*self.tickWSyVal
         CreateWorkspace(OutputWorkspace=self.tickWSName,
                         DataX = dataXArray,
                         DataY = dataYArray,
                         UnitX = 'd-Spacing')
         
-    def scaleLattice(self,scale):
+    def scaleLattice(self,scaleFactor):
+        #includes code from Z. Morgan https://github.com/zjmorgan/NeuXtalViz/blob/main/src/NeuXtalViz/models/crystal_structure_tools.py
 
-        self.a = self.a_orig*scale
-        self.b = self.b_orig*scale
-        self.c = self.c_orig*scale
+        self.modifiedLattice = True
+        self.latticeScaleFactor = scaleFactor
+        # have to build a new CrystalStructure
+        # first need ingredients for this:
+        params = [self.a_orig*scaleFactor,
+                  self.b_orig*scaleFactor,
+                  self.c_orig*scaleFactor,
+                  self.alpha_orig,
+                  self.beta_orig,
+                  self.gamma_orig]
+        
+        print(params)
+        
+        scatterers = self.get_scatterers()
+
+        line = ' '.join(['{}']*6)
+        constants = line.format(*params)
+
+        atom_info = ';'.join([line.format(*s) for s in scatterers])
+
+        #then build CrystalStructure
+        crystal_mod = CrystalStructure(constants,self.HMSymbol, atom_info)
+
+        #now process this to update current crystal attributes
+        self.processCrystal(crystal_mod)
+
+        #if workspace exists, need to update it with scaled d-spacings
+        if self.tickWSExists:
+            self.tickWS(self.tickWSyVal)
 
         return
     
+    def get_scatterers(self):
+        #includes code from Z. Morgan https://github.com/zjmorgan/NeuXtalViz/blob/main/src/NeuXtalViz/models/crystal_structure_tools.py
+
+        print('getting scatterers')
+        scatterers = self.scatterers
+        print(scatterers)
+        scatterers = [atm.split(' ') for atm in list(scatterers)]
+        scatterers = [[val if val.isalpha() else float(val) \
+                       for val in scatterer] for scatterer in scatterers]
+        print(scatterers)
+        return scatterers
+    
     def resetLattice(self):
 
-        self.a = self.a_orig
-        self.b = self.b_orig
-        self.c = self.c_orig
+        self.modifiedLattice = False
+        self.scaleLattice(1.0)
 
         return
+    
+    def plot(self):
+                        
+        
+        ticks = ADS.retrieve(self.tickWSName)
+
+        fig, axes = plt.subplots(edgecolor='#ffffff', num='ticks plot', subplot_kw={'projection': 'mantid'})
+
+        axes.plot(ticks, color='#1f77b4', 
+                  label='ticks: diamond', 
+                  linestyle='None', 
+                  marker='|', 
+                  markersize=self.markerHeight,
+                  markeredgecolor=self.markeredgecolor, 
+                  wkspIndex=0)
+        
+        axes.tick_params(axis='x', which='major', **{'gridOn': False, 'tick1On': True, 'tick2On': False, 'label1On': True, 'label2On': False, 'size': 6, 'tickdir': 'out', 'width': 1})
+        axes.tick_params(axis='y', which='major', **{'gridOn': False, 'tick1On': True, 'tick2On': False, 'label1On': True, 'label2On': False, 'size': 6, 'tickdir': 'out', 'width': 1})
+        axes.set_title('ticks: diamond')
+        axes.set_xlabel('d-Spacing ($d-Spacing$)')
+        axes.set_ylabel('($d-Spacing$)$^{-1}$')
+        # axes.set_xlim([0.4448, 2.0285])
+        # axes.set_ylim([0.14175, 0.15825])
+        legend = axes.legend(fontsize=8.0).set_draggable(True).legend
+
+        plt.show()
