@@ -58,6 +58,7 @@ TODO: it should use the filename of a cif file as a nickname
 You can change the nickname by editing the attribute `nickName`:
 ```
 sample1.nickName = 'a better nickname'
+```
 
 `crystalBox` has an additional function `showNicknames` to display the list of defined nicknames:
 ```
