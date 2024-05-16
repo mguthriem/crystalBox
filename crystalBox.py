@@ -248,7 +248,7 @@ class Box:
         fig, axes = plt.subplots(edgecolor='#ffffff', num='ticks plot', subplot_kw={'projection': 'mantid'})
 
         axes.plot(ticks, color='#1f77b4', 
-                  label='ticks: diamond', 
+                  label=f"ticks: {self.nickName}", 
                   linestyle='None', 
                   marker='|', 
                   markersize=self.markerHeight,
@@ -257,7 +257,7 @@ class Box:
         
         axes.tick_params(axis='x', which='major', **{'gridOn': False, 'tick1On': True, 'tick2On': False, 'label1On': True, 'label2On': False, 'size': 6, 'tickdir': 'out', 'width': 1})
         axes.tick_params(axis='y', which='major', **{'gridOn': False, 'tick1On': True, 'tick2On': False, 'label1On': True, 'label2On': False, 'size': 6, 'tickdir': 'out', 'width': 1})
-        axes.set_title('ticks: diamond')
+        axes.set_title(f"ticks: {self.nickName}")
         axes.set_xlabel('d-Spacing ($d-Spacing$)')
         axes.set_ylabel('($d-Spacing$)$^{-1}$')
         # axes.set_xlim([0.4448, 2.0285])
