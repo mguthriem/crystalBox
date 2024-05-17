@@ -24,8 +24,8 @@ class Box:
         if not self.validCif:
             print('ERROR: validCif failed')
 
-        self.dMin = 0.5
-        self.dMax = 100
+        self.dMin = 0.8
+        self.dMax = 2.5
  
         self.modifiedLattice = False # if false allows scaling of lattice
         if self.validCif:
@@ -265,6 +265,12 @@ class Box:
         legend = axes.legend(fontsize=8.0).set_draggable(True).legend
 
         plt.show()
+
+    def dLimits(self,dMin,dMax):
+        self.dMin=dMin
+        self.dMax=dMax
+        self.loadCif()
+        
 
 def showNicknames():
     print('available nicknames are:')
