@@ -24,8 +24,8 @@ class Box:
         if not self.validCif:
             print('ERROR: validCif failed')
 
-        self.dMin = 0.8
-        self.dMax = 2.5
+        self.dMin = 0.5
+        self.dMax = 100
  
         self.modifiedLattice = False # if false allows scaling of lattice
         if self.validCif:
@@ -131,7 +131,13 @@ class Box:
         self.alpha = unitCell.alpha() 
         self.beta = unitCell.beta() 
         self.gamma = unitCell.gamma()
-        self.volume = unitCell.volume()
+        self.volume = unitCell.volume()()
+        self.astar = unitCell.astar()
+        self.bstar = unitCell.bstar()
+        self.cstar = unitCell.cstar()
+        self.alphastar = unitCell.alphastar()
+        self.betastar = unitCell.betastar()
+        self.gammastar = unitCell.gammastar()
                 
         #Generate reflections
         generator = ReflectionGenerator(crystal)
