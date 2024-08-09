@@ -131,7 +131,7 @@ class Box:
         self.alpha = unitCell.alpha() 
         self.beta = unitCell.beta() 
         self.gamma = unitCell.gamma()
-        self.volume = unitCell.volume()()
+        self.volume = unitCell.volume()
         self.astar = unitCell.astar()
         self.bstar = unitCell.bstar()
         self.cstar = unitCell.cstar()
