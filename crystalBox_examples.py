@@ -56,7 +56,7 @@ diamond.tickWS(-0.01) #the value in brackets is the height of the tick marks
 
 #and then plot is using
 
-diamond.plot()
+diamond.plot("ticks: diamond")
 
 #you can then drag diffraction data onto that plot
 

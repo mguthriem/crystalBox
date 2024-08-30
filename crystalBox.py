@@ -246,12 +246,22 @@ class Box:
 
         return
     
-    def plot(self):
+    def plot(self,workspaceToPlot):
                         
-        
+        """workspaceToPlot is the an existing workspace that will be plotted along wit the ticks 
+        """
+
         ticks = ADS.retrieve(self.tickWSName)
+        if workspaceToPlot != '':
+            dataToPlot = ADS.retrieve(workspaceToPlot)
+            nHst = mtd[workspaceToPlot].getNumberHistograms()
+            if nHst >= 7:
+                nHst=6
+                print("WARNING: can only plot first 6 spectra!")
+
 
         fig, axes = plt.subplots(edgecolor='#ffffff', num='ticks plot', subplot_kw={'projection': 'mantid'})
+        lineColours = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b']
 
         axes.plot(ticks, color='#1f77b4', 
                   label=f"ticks: {self.nickName}", 
@@ -260,7 +270,11 @@ class Box:
                   markersize=self.markerHeight,
                   markeredgecolor=self.markeredgecolor, 
                   wkspIndex=0)
-        
+
+        if workspaceToPlot != '':
+            for spectrum in range(nHst):
+                axes.plot(dataToPlot,wkspIndex=spectrum,color=lineColours[spectrum],label=f"spec{spectrum}")
+
         axes.tick_params(axis='x', which='major', **{'gridOn': False, 'tick1On': True, 'tick2On': False, 'label1On': True, 'label2On': False, 'size': 6, 'tickdir': 'out', 'width': 1})
         axes.tick_params(axis='y', which='major', **{'gridOn': False, 'tick1On': True, 'tick2On': False, 'label1On': True, 'label2On': False, 'size': 6, 'tickdir': 'out', 'width': 1})
         axes.set_title(f"ticks: {self.nickName}")
