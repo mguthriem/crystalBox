@@ -292,7 +292,9 @@ class Box:
         self.dMin=dMin
         self.dMax=dMax
         self.loadCif()
-        
+
+    def jasmineFunction(self):
+        print("This is Jasmine's Function.") 
 
 def showNicknames():
     print('available nicknames are:')
