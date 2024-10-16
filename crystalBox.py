@@ -292,7 +292,22 @@ class Box:
         self.dMin=dMin
         self.dMax=dMax
         self.loadCif()
+        def jasmineFunction(self):
+        print("This is Jasmine's Function")
+    
+    def jasmineFunction(self):
+        print("This is Jasmine's Function")
         
+    def getEquivalents(self, hkl):
+        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
+        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
+        
+        equivalents = []
+        equivalents.append(pg.getEquivalents(hkl))
+        
+        print(sg)
+        print(pg)
+        print("The equivalents of reflection", hkl, "include the following:", equivalents)    
 
 def showNicknames():
     print('available nicknames are:')
