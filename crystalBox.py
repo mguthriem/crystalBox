@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from mantid.plots.utility import MantidAxType
 from mantid.api import AnalysisDataService as ADS
 
+from mantid.geometry import PointGroupFactory
+from mantid.geometry import SpaceGroupFactory
 #this is a test by Jasmine K. Hinton# 
 
 defaultCifFolder = '/SNS/SNAP/shared/cifLibrary'
