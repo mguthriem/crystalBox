@@ -292,8 +292,6 @@ class Box:
         self.dMin=dMin
         self.dMax=dMax
         self.loadCif()
-        def jasmineFunction(self):
-        print("This is Jasmine's Function")
     
     def jasmineFunction(self):
         print("This is Jasmine's Function")
@@ -302,8 +300,7 @@ class Box:
         sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
         pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
         
-        equivalents = []
-        equivalents.append(pg.getEquivalents(hkl))
+        equivalents = pg.getEquivalents(hkl)
         
         print(sg)
         print(pg)
