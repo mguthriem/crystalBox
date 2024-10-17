@@ -142,7 +142,9 @@ class Box:
         self.alphastar = unitCell.alphastar()
         self.betastar = unitCell.betastar()
         self.gammastar = unitCell.gammastar()
-                
+
+        self.BMatrix = unitCell.getB()
+        
         #Generate reflections
         generator = ReflectionGenerator(crystal)
         # Create list of unique reflections between 0.7 and 3.0 Angstrom
@@ -307,6 +309,37 @@ class Box:
         print(sg)
         print(pg)
         print("The equivalents of reflection", hkl, "include the following:", equivalents)    
+    
+    def makeCrystal(self):
+        params = [self.a_orig,
+                  self.b_orig,
+                  self.c_orig,
+                  self.alpha_orig,
+                  self.beta_orig,
+                  self.gamma_orig]
+        #print(params)
+        line = ' '.join(['{}']*6)
+        constants = line.format(*params)
+        scatterers = self.get_scatterers()
+        atom_info = ';'.join([line.format(*s) for s in scatterers])
+        crystal_structure = CrystalStructure(constants,self.HMSymbol, atom_info)
+        
+        return crystal_structure
+                        
+    def cartesianHKL(self,h):
+        v = np.matmul(self.BMatrix,h)
+        return v
+    
+    def getAngle(self,vector1,vector2):
+        
+        angle_rad_q_obs = np.arccos(np.dot(vector1,vector2)/(np.linalg.norm(vector1)*
+            np.linalg.norm(vector2)))
+        angle_deg_q_obs = np.degrees(angle_rad_q_obs)
+        
+        print ("Input vectors were", vector1,"and", vector2,
+               ". The angle between these two vectors is", angle_deg_q_obs, "degrees.")
+
+        return angle_deg_q_obs 
 
 def showNicknames():
     print('available nicknames are:')
