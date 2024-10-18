@@ -30,9 +30,6 @@ print("This is a test of new method 'makeCrystal':")
 crystal = silicon.makeCrystal()
 print(crystal)
 
-print("I think I need to run malcolm's 'proccessCrystal' method first:")
-print(silicon.processCrystal(crystal))
-
 print("This is a test of the function 'cartesianHKL':")
 print(silicon.cartesianHKL([4.64539, -1.34246, 3.24761]))
 
@@ -50,3 +47,9 @@ print(angle_obs)
 print("This is a test of the function 'getAngle' where hkls are not rounded:")
 angle_calc = silicon.getAngle([1.96187, 4.98722, 0.91789], [-6.95302, 0.958652, -3.97906])
 print(angle_calc)
+
+print(silicon.defineSpaceGroup())
+
+#to make the below work, I need to finish the method makeCrystal
+# print("I think I need to run malcolm's 'proccessCrystal' method first:")
+# print(silicon.processCrystal(crystal))
