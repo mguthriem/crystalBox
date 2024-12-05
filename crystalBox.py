@@ -6,6 +6,7 @@ from mantid.geometry import CrystalStructure, ReflectionGenerator, ReflectionCon
 import matplotlib.pyplot as plt
 from mantid.plots.utility import MantidAxType
 from mantid.api import AnalysisDataService as ADS
+from mantid.kernel import Atom
 
 from mantid.geometry import PointGroupFactory
 from mantid.geometry import SpaceGroupFactory
@@ -33,7 +34,8 @@ class Box:
  
         self.modifiedLattice = False # if false allows scaling of lattice
         if self.validCif:
-            self.loadCif()
+            #self.loadCif()
+            self.loadCifNormUiso()
 
         self.tickWSExists = False
 
@@ -119,7 +121,39 @@ class Box:
         self.gamma_orig = self.gamma
 
         DeleteWorkspace(Workspace='tmp')
+    
+    def loadCifNormUiso(self):
+        CreateSampleWorkspace(OutputWorkspace='tmp')
+        LoadCIF(Workspace='tmp',InputFile=self.cifFilePath)
+        ws = mtd['tmp']
+        self.crystal_orig = ws.sample().getCrystalStructure()
+
+        #get scatterers
+        self.scatterers = self.crystal_orig.getScatterers()
+        self.processCrystal(self.crystal_orig)
         
+        #Correct Uiso and put them back into the correct string format
+        corrected_atom_string = self.set_scatterers()
+        #print(corrected_atom_string)
+        #Rebuild the crystal structure
+        lattice_params = f"{self.a} {self.b} {self.c} {self.alpha} {self.beta} {self.gamma}"
+        crystal_mod = CrystalStructure(lattice_params, self.HMSymbol, corrected_atom_string)
+        #Update current crystal 
+        self.scatterers = crystal_mod.getScatterers()
+        self.processCrystal(crystal_mod)
+        #print(self.scatterers)
+        
+        
+        # current values for lattice params are fresh from cif and unmodified. Keep a copy of these
+        self.a_orig = self.a
+        self.b_orig = self.b
+        self.c_orig = self.c
+        self.alpha_orig = self.alpha
+        self.beta_orig = self.beta
+        self.gamma_orig = self.gamma
+
+        DeleteWorkspace(Workspace='tmp')
+    
     def processCrystal(self,crystal):
    
         unitCell = crystal.getUnitCell()
@@ -236,12 +270,30 @@ class Box:
 
         print('getting scatterers')
         scatterers = self.scatterers
-        print(scatterers)
+        #print(scatterers)
         scatterers = [atm.split(' ') for atm in list(scatterers)]
         scatterers = [[val if val.isalpha() else float(val) \
                        for val in scatterer] for scatterer in scatterers]
         print(scatterers)
         return scatterers
+    
+    def set_scatterers(self):
+        scatterers = self.estimate_uiso()
+        #return [f'{scatterer[0]} {scatterer[1]:.5f} {scatterer[2]:.5f} {scatterer[3]:.5f} {scatterer[4]:.0f} {scatterer[5]:.5f}' for scatterer in scatterers]
+        return "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in scatterers])      
+    
+    def estimate_uiso(self):
+        #sampleName = crys.Box('kdp')
+        CellContents=self.get_scatterers()
+        OriginalCellContents = CellContents.copy()
+        for i in range(0,len(CellContents)):
+            Mass = Atom(CellContents[i][0]).mass
+            #print(CellContents[i][0]+ ' has mass ' + str(Mass))
+            #print('Original Uiso: ' + str(OriginalCellContents[i][5]))
+            #A factor of 10 is added here to make the F2 numbers less vanishingly small
+            CellContents[i][5] = 1/(10*np.sqrt(Mass))
+            #print('Mass approximated Uiso: ' +str(CellContents[i][5]))
+        return CellContents
     
     def resetLattice(self):
 
@@ -293,10 +345,11 @@ class Box:
     def dLimits(self,dMin,dMax):
         self.dMin=dMin
         self.dMax=dMax
-        self.loadCif()
+        #self.loadCif()
+        self.loadCifNormUiso()
     
     def jasmineFunction(self):
-        print("This is Jasmine's Function")
+        print("This is Jasmine's Functioan")
         
     def getEquivalents(self, hkl):
         sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
@@ -314,4 +367,3 @@ def showNicknames():
         csvFile = csv.reader(file)
         for line in csvFile:
             print(line[0].lower())
-
