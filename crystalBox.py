@@ -14,7 +14,11 @@ from mantid.geometry import SpaceGroupFactory
 
 defaultCifFolder = '/SNS/SNAP/shared/cifLibrary'
 
-class Box:
+class Box():
+    
+    #_originalCellContents = []
+    #Rename 'scatterers' to 'cellContents' for improved naming convention
+    #cellContents = []
 
     '''class to hold list of peaks and their properties'''
 
@@ -34,8 +38,7 @@ class Box:
  
         self.modifiedLattice = False # if false allows scaling of lattice
         if self.validCif:
-            #self.loadCif()
-            self.loadCifNormUiso()
+            self.loadCif()           
 
         self.tickWSExists = False
 
@@ -106,12 +109,12 @@ class Box:
         CreateSampleWorkspace(OutputWorkspace='tmp')
         LoadCIF(Workspace='tmp',InputFile=self.cifFilePath)
         ws = mtd['tmp']
-        self.crystal_orig = ws.sample().getCrystalStructure()
+        self._originalCrystal = ws.sample().getCrystalStructure()
+        self._originalCellContents = self._originalCrystal.getScatterers()
 
         #get scatterers
-        self.scatterers = self.crystal_orig.getScatterers()
-
-        self.processCrystal(self.crystal_orig)
+        self.cellContents = self._originalCrystal.getScatterers()
+        self.processCrystal(self._originalCrystal)
         # current values for lattice params are fresh from cif and unmodified. Keep a copy of these
         self.a_orig = self.a
         self.b_orig = self.b
@@ -122,37 +125,6 @@ class Box:
 
         DeleteWorkspace(Workspace='tmp')
     
-    def loadCifNormUiso(self):
-        CreateSampleWorkspace(OutputWorkspace='tmp')
-        LoadCIF(Workspace='tmp',InputFile=self.cifFilePath)
-        ws = mtd['tmp']
-        self.crystal_orig = ws.sample().getCrystalStructure()
-
-        #get scatterers
-        self.scatterers = self.crystal_orig.getScatterers()
-        self.processCrystal(self.crystal_orig)
-        
-        #Correct Uiso and put them back into the correct string format
-        corrected_atom_string = self.set_scatterers()
-        #print(corrected_atom_string)
-        #Rebuild the crystal structure
-        lattice_params = f"{self.a} {self.b} {self.c} {self.alpha} {self.beta} {self.gamma}"
-        crystal_mod = CrystalStructure(lattice_params, self.HMSymbol, corrected_atom_string)
-        #Update current crystal 
-        self.scatterers = crystal_mod.getScatterers()
-        self.processCrystal(crystal_mod)
-        #print(self.scatterers)
-        
-        
-        # current values for lattice params are fresh from cif and unmodified. Keep a copy of these
-        self.a_orig = self.a
-        self.b_orig = self.b
-        self.c_orig = self.c
-        self.alpha_orig = self.alpha
-        self.beta_orig = self.beta
-        self.gamma_orig = self.gamma
-
-        DeleteWorkspace(Workspace='tmp')
     
     def processCrystal(self,crystal):
    
@@ -246,7 +218,7 @@ class Box:
         
         print(params)
         
-        scatterers = self.get_scatterers()
+        scatterers = self.parseCellContents()
 
         line = ' '.join(['{}']*6)
         constants = line.format(*params)
@@ -265,36 +237,36 @@ class Box:
 
         return
     
-    def get_scatterers(self):
+    def parseCellContents(self):
         #includes code from Z. Morgan https://github.com/zjmorgan/NeuXtalViz/blob/main/src/NeuXtalViz/models/crystal_structure_tools.py
-
-        print('getting scatterers')
-        scatterers = self.scatterers
-        #print(scatterers)
+        print('Parsing contents of unit-cell')
+        scatterers = self.cellContents
         scatterers = [atm.split(' ') for atm in list(scatterers)]
         scatterers = [[val if val.isalpha() else float(val) \
                        for val in scatterer] for scatterer in scatterers]
-        print(scatterers)
         return scatterers
     
-    def set_scatterers(self):
-        scatterers = self.estimate_uiso()
-        #return [f'{scatterer[0]} {scatterer[1]:.5f} {scatterer[2]:.5f} {scatterer[3]:.5f} {scatterer[4]:.0f} {scatterer[5]:.5f}' for scatterer in scatterers]
-        return "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in scatterers])      
-    
-    def estimate_uiso(self):
-        #sampleName = crys.Box('kdp')
-        CellContents=self.get_scatterers()
-        OriginalCellContents = CellContents.copy()
-        for i in range(0,len(CellContents)):
-            Mass = Atom(CellContents[i][0]).mass
-            #print(CellContents[i][0]+ ' has mass ' + str(Mass))
-            #print('Original Uiso: ' + str(OriginalCellContents[i][5]))
+    def reparseCellContents(input):
+        return  "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in input])      
+        
+
+    def fixUiso(self):
+        contents=self.parseCellContents()
+        for i in range(0,len(contents)):
+            Mass = Atom(contents[i][0]).mass
             #A factor of 10 is added here to make the F2 numbers less vanishingly small
-            CellContents[i][5] = 1/(10*np.sqrt(Mass))
-            #print('Mass approximated Uiso: ' +str(CellContents[i][5]))
-        return CellContents
-    
+            contents[i][5] = 1/(10*np.sqrt(Mass))
+
+        modifiedContents = "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in contents])
+
+        #Rebuild the crystal structure
+        latticeParams = f"{self.a} {self.b} {self.c} {self.alpha} {self.beta} {self.gamma}"
+        crystalMod = CrystalStructure(latticeParams, self.HMSymbol, modifiedContents)
+        #Update current crystal 
+        self.cellContents = crystalMod.getScatterers()
+        self.processCrystal(crystalMod)
+
+
     def resetLattice(self):
 
         self.modifiedLattice = False
@@ -349,7 +321,7 @@ class Box:
         self.loadCifNormUiso()
     
     def jasmineFunction(self):
-        print("This is Jasmine's Functioan")
+        print("This is Jasmine's Function")
         
     def getEquivalents(self, hkl):
         sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
