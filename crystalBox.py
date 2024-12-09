@@ -15,10 +15,7 @@ from mantid.geometry import SpaceGroupFactory
 defaultCifFolder = '/SNS/SNAP/shared/cifLibrary'
 
 class Box():
-    
-    #_originalCellContents = []
-    #Rename 'scatterers' to 'cellContents' for improved naming convention
-    #cellContents = []
+
 
     '''class to hold list of peaks and their properties'''
 
@@ -109,11 +106,13 @@ class Box():
         CreateSampleWorkspace(OutputWorkspace='tmp')
         LoadCIF(Workspace='tmp',InputFile=self.cifFilePath)
         ws = mtd['tmp']
-        self._originalCrystal = ws.sample().getCrystalStructure()
-        self._originalCellContents = self._originalCrystal.getScatterers()
+        self._originalCrystal  = ws.sample().getCrystalStructure()
+        self._originalUnitCell = ws.sample().getCrystalStructure().getUnitCell()
+                
 
         #get scatterers
         self.cellContents = self._originalCrystal.getScatterers()
+        self._originalCellContents = self.parseCellContents()
         self.processCrystal(self._originalCrystal)
         # current values for lattice params are fresh from cif and unmodified. Keep a copy of these
         self.a_orig = self.a
@@ -248,17 +247,14 @@ class Box():
         scatterers = [[val if val.isalpha() else float(val) \
                        for val in scatterer] for scatterer in scatterers]
         return scatterers
-    
-    def reparseCellContents(input):
-        return  "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in input])      
-        
+          
 
     def fixUiso(self):
         contents=self.parseCellContents()
         for i in range(0,len(contents)):
             Mass = Atom(contents[i][0]).mass
             #A factor of 10 is added here to make the F2 numbers less vanishingly small
-            contents[i][5] = 1/(10*np.sqrt(Mass))
+            contents[i][5] = 1/(30*np.sqrt(Mass))
 
         modifiedContents = "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in contents])
 
@@ -268,7 +264,18 @@ class Box():
         #Update current crystal 
         self.cellContents = crystalMod.getScatterers()
         self.processCrystal(crystalMod)
-
+    
+    def resetCell(self):
+        #Resets the crystal contents to those loaded from teh cif, lattice params, cell contents, and Uiso
+        #Call original cell and reformat back into correct form
+        oldCellContents = self._originalCellContents
+        modifiedContents = "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in oldCellContents])
+        #Rebuild the crystal structure and reset lattive parameters
+        latticeParams = f"{self._originalUnitCell.a()} {self._originalUnitCell.b()} {self._originalUnitCell.c()} {self._originalUnitCell.alpha()} {self._originalUnitCell.beta()} {self._originalUnitCell.gamma()}"
+        crystalMod = CrystalStructure(latticeParams, self.HMSymbol, modifiedContents)
+        #Update current crystal 
+        self.cellContents = crystalMod.getScatterers()
+        self.processCrystal(crystalMod)
 
     def resetLattice(self):
 
@@ -416,10 +423,7 @@ class Box():
         print("Angle is in degrees =", degrees)
         #self.loadCif()
         self.loadCifNormUiso()
-    
-    def jasmineFunction(self):
-        print("This is Jasmine's Function")
-        
+
     def getEquivalents(self, hkl):
         sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
         pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
@@ -430,7 +434,7 @@ class Box():
         print(pg)
         print("The equivalents of reflection", hkl, "include the following:", equivalents)    
 
-        return angle_deg_q_obs                
+        return #angle_deg_q_obs                
     
     #########################################################################
     #                           makeCrystal                                 #
