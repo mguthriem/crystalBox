@@ -251,7 +251,7 @@ class Box():
         for i in range(0,len(contents)):
             Mass = Atom(contents[i][0]).mass
             #A factor of 10 is added here to make the F2 numbers less vanishingly small
-            contents[i][5] = 1/(10*np.sqrt(Mass))
+            contents[i][5] = 1/(30*np.sqrt(Mass))
 
         modifiedContents = "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in contents])
 
