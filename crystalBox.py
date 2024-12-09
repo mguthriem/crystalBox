@@ -147,7 +147,10 @@ class Box():
         self.alphastar = unitCell.alphastar()
         self.betastar = unitCell.betastar()
         self.gammastar = unitCell.gammastar()
-                
+
+        #JKH added to make use in cartesian hkl method
+        self.BMatrix = unitCell.getB()
+        
         #Generate reflections
         generator = ReflectionGenerator(crystal)
         # Create list of unique reflections between 0.7 and 3.0 Angstrom
@@ -325,8 +328,102 @@ class Box():
         self.dMin=dMin
         self.dMax=dMax
         self.loadCif()
+
+    #########################################################################
+    #                           jasmineFunction                             #
+    #   jasmineFunction is the first function I made in here because I was  #
+    #   afraid of messing up Malcolm's code and was learning how commmits   #
+    #   and pull requests work. Now it's a monument and marker to my edits  #                     
+    #########################################################################
+
+    def jasmineFunction(self):
+        print("This is Jasmine's Function")
     
+    #########################################################################
+    #                           defineSpaceGroup                            #
+    #   defineSpaceGroup is intended to pull the space group from the cif,  #
+    #   and create a point group from it. I found I was using it a lot in   #
+    #   other methods so I may add this method into those? Later note: I    #
+    #   tried this and I can't call a method I wrote in crystal box in here #
+    #########################################################################
+    
+    def defineSpaceGroup(self):
+        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
+        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
+        return pg
+    
+    #########################################################################
+    #                           getEquivalents                              #
+    #   getEquivalents is intended to take a reflection, pull the space     #
+    #   group from the cif, create a point group, and then provide all the  #
+    #   equivalent reflections of that given hkl.                           #
+    #########################################################################
+
+    def getEquivalents(self, hkl):
+        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
+        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
+
+        equivalents = pg.getEquivalents(hkl)
         
+        print(sg)
+        print(pg)
+        print("The equivalents of reflection", hkl, "include the following:", equivalents)
+        print ("Number of reflections equivalent to ", hkl, "is", len(equivalents[0]))
+       
+    #########################################################################
+    #                           cartesianHKL                                #
+    #   the purpose of cartesianHKL is to take a vector, in this case,      #
+    #   likely a set of 3 q-coordinates, and if they're not cartesian, then #
+    #   multiply by the b-matrix (obtained in process crystal method) and   #
+    #   the resulting vector should then be cartesian. It now actually      #
+    #   verifies the crystal system has a cartesian basis and proceeds with #
+    #   the calculation if so. Otherwise it says you you can skip this step #                                                                   #
+    #########################################################################
+    
+    def cartesianHKL(self,h):
+
+        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
+        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
+        crystalSystem = str(pg.getCrystalSystem())
+
+        if crystalSystem == "Cubic" or crystalSystem == "Orthorhombic" or crystalSystem == "Tetragonal":
+            print("Crystal system is ", crystalSystem)
+            print("Crystal system has cartesian basis and does not need to be converted via cartesianHKL.",
+                  "You may proceed to calculating angle if you wish.")
+        else:
+            print("Crystal system is ", crystalSystem)
+            print("pg.getCrystalSystem() outputs a variable of type:", type(crystalSystem))
+            print("Crystal system does not have cartesian basis and will now be converted via caresianHKL")
+            
+            v = np.matmul(self.BMatrix,h)
+            return v
+    
+    #########################################################################
+    #                           getAngle                                    #
+    #   getAngle is intended to take two vectors and calculate the angle    #
+    #   between them in degrees. A boolean variable called degrees is       #
+    #   assigned to help the user know that the result will be in degrees   #
+    #   and not radians. It is assumed that the vectors are on an           #
+    #   an orthonormal cartesian basis. If they are not, it is recommended  #
+    #   to use the method cartesian hkl first.                              #
+    #########################################################################
+
+    def getAngle(self,vector1,vector2, degrees=True):
+        
+        print("Ensure your vectors are in a cartesian basis set before using this method,",
+              "otherwise your result will not be meaningful.",
+              "Use method, 'cartesianHKL' to verify this.")
+        
+        angle_rad_q_obs = np.arccos(np.dot(vector1,vector2)/(np.linalg.norm(vector1)*
+            np.linalg.norm(vector2)))
+        angle_deg_q_obs = np.degrees(angle_rad_q_obs)
+        
+        print ("Input vectors were", vector1,"and", vector2,
+               ". The angle between these two vectors is", angle_deg_q_obs, "degrees.")
+        print("Angle is in degrees =", degrees)
+        #self.loadCif()
+        self.loadCifNormUiso()
+
     def getEquivalents(self, hkl):
         sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
         pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
@@ -337,6 +434,32 @@ class Box():
         print(pg)
         print("The equivalents of reflection", hkl, "include the following:", equivalents)    
 
+        return #angle_deg_q_obs                
+    
+    #########################################################################
+    #                           makeCrystal                                 #
+    #   this is where I would put my description of this method             #
+    #   ...if I had one!!                                                   #
+    #(https://imgflip.com/s/meme/This-Is-Where-Id-Put-My-Trophy-If-I-Had-One.jpg)#
+    #   (this is a work in progress in other words),                        #
+    #########################################################################
+    
+    def makeCrystal(self):
+        params = [self.a_orig,
+                  self.b_orig,
+                  self.c_orig,
+                  self.alpha_orig,
+                  self.beta_orig,
+                  self.gamma_orig]
+        #print(params)
+        line = ' '.join(['{}']*6)
+        constants = line.format(*params)
+        scatterers = self.get_scatterers()
+        atom_info = ';'.join([line.format(*s) for s in scatterers])
+        crystal_structure = CrystalStructure(constants,self.HMSymbol, atom_info)
+        
+        return crystal_structure 
+        
 def showNicknames():
     print('available nicknames are:')
     with open(f"{defaultCifFolder}/nickNames.csv", mode = 'r') as file:
