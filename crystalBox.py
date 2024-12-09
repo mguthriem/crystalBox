@@ -6,6 +6,7 @@ from mantid.geometry import CrystalStructure, ReflectionGenerator, ReflectionCon
 import matplotlib.pyplot as plt
 from mantid.plots.utility import MantidAxType
 from mantid.api import AnalysisDataService as ADS
+from mantid.kernel import Atom
 
 from mantid.geometry import PointGroupFactory
 from mantid.geometry import SpaceGroupFactory
@@ -13,7 +14,11 @@ from mantid.geometry import SpaceGroupFactory
 
 defaultCifFolder = '/SNS/SNAP/shared/cifLibrary'
 
-class Box:
+class Box():
+    
+    #_originalCellContents = []
+    #Rename 'scatterers' to 'cellContents' for improved naming convention
+    #cellContents = []
 
     '''class to hold list of peaks and their properties'''
 
@@ -33,7 +38,7 @@ class Box:
  
         self.modifiedLattice = False # if false allows scaling of lattice
         if self.validCif:
-            self.loadCif()
+            self.loadCif()           
 
         self.tickWSExists = False
 
@@ -104,12 +109,12 @@ class Box:
         CreateSampleWorkspace(OutputWorkspace='tmp')
         LoadCIF(Workspace='tmp',InputFile=self.cifFilePath)
         ws = mtd['tmp']
-        self.crystal_orig = ws.sample().getCrystalStructure()
+        self._originalCrystal = ws.sample().getCrystalStructure()
+        self._originalCellContents = self._originalCrystal.getScatterers()
 
         #get scatterers
-        self.scatterers = self.crystal_orig.getScatterers()
-
-        self.processCrystal(self.crystal_orig)
+        self.cellContents = self._originalCrystal.getScatterers()
+        self.processCrystal(self._originalCrystal)
         # current values for lattice params are fresh from cif and unmodified. Keep a copy of these
         self.a_orig = self.a
         self.b_orig = self.b
@@ -119,7 +124,8 @@ class Box:
         self.gamma_orig = self.gamma
 
         DeleteWorkspace(Workspace='tmp')
-        
+    
+    
     def processCrystal(self,crystal):
    
         unitCell = crystal.getUnitCell()
@@ -212,7 +218,7 @@ class Box:
         
         print(params)
         
-        scatterers = self.get_scatterers()
+        scatterers = self.parseCellContents()
 
         line = ' '.join(['{}']*6)
         constants = line.format(*params)
@@ -231,18 +237,36 @@ class Box:
 
         return
     
-    def get_scatterers(self):
+    def parseCellContents(self):
         #includes code from Z. Morgan https://github.com/zjmorgan/NeuXtalViz/blob/main/src/NeuXtalViz/models/crystal_structure_tools.py
-
-        print('getting scatterers')
-        scatterers = self.scatterers
-        print(scatterers)
+        print('Parsing contents of unit-cell')
+        scatterers = self.cellContents
         scatterers = [atm.split(' ') for atm in list(scatterers)]
         scatterers = [[val if val.isalpha() else float(val) \
                        for val in scatterer] for scatterer in scatterers]
-        print(scatterers)
         return scatterers
     
+    def reparseCellContents(input):
+        return  "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in input])      
+        
+
+    def fixUiso(self):
+        contents=self.parseCellContents()
+        for i in range(0,len(contents)):
+            Mass = Atom(contents[i][0]).mass
+            #A factor of 10 is added here to make the F2 numbers less vanishingly small
+            contents[i][5] = 1/(10*np.sqrt(Mass))
+
+        modifiedContents = "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in contents])
+
+        #Rebuild the crystal structure
+        latticeParams = f"{self.a} {self.b} {self.c} {self.alpha} {self.beta} {self.gamma}"
+        crystalMod = CrystalStructure(latticeParams, self.HMSymbol, modifiedContents)
+        #Update current crystal 
+        self.cellContents = crystalMod.getScatterers()
+        self.processCrystal(crystalMod)
+
+
     def resetLattice(self):
 
         self.modifiedLattice = False
@@ -293,7 +317,8 @@ class Box:
     def dLimits(self,dMin,dMax):
         self.dMin=dMin
         self.dMax=dMax
-        self.loadCif()
+        #self.loadCif()
+        self.loadCifNormUiso()
     
     def jasmineFunction(self):
         print("This is Jasmine's Function")
@@ -314,4 +339,3 @@ def showNicknames():
         csvFile = csv.reader(file)
         for line in csvFile:
             print(line[0].lower())
-
