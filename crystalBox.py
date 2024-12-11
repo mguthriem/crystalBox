@@ -14,8 +14,78 @@ from mantid.geometry import SpaceGroupFactory
 
 defaultCifFolder = '/SNS/SNAP/shared/cifLibrary'
 
-class Box():
+class parseMantidCrystal():
 
+    '''an interface to mantid's CrystalStructure objects
+    
+    The Mantid CrystalStructure class 
+    https://github.com/mantidproject/mantid/blob/main/Framework/Geometry/inc/MantidGeometry/Crystal/CrystalStructure.h
+    
+    Are instantiated using three key piece of crystallographic information:
+
+    1. The lattice paramaters, specified as a string containing 3 or 6 floating point numbers (if 3 are used, the final 3 are taken to be 90.0 90.0 90.0)
+    2. The space group, also specified as a string
+    3. The atomic basis, specified as a single string where each atom has space separated
+        Type x y z occupancy uiso, and each atom is separated by a semi colon.
+
+    Meanwhile these same quantities are output by dedicated methods in the following way:
+
+    1. getUnitCell() return a class that contains the individual lattice parameters as individual
+        individual attributes.
+    2. getSpaceGroup().getHMSymbol() is a string
+    3. getScatterers() returns a list of string, one string per atom
+    
+    The goal of localCrystalStructure is to provide a more convenient holder for the crystallographic 
+    properties that allows them to be easily modified.
+
+    It will be instantiated by a mantid CrystalStructure object and has the following attributes:
+
+    1. unitCellList = a list of floats corresponding to a,b,c,alpha,beta,gamma
+    2. spaceGroupString = is identical to getSpaceGroup().getHMSymbol()
+    3. cellContentsList = a list of lists, with each atom being represented by a list of its properties
+
+    It will also have methods to convert its own attributes into a mantid CrystalStructure.
+
+    '''
+
+    def __init__(self,mantidCrystalStructure):
+
+        #useful attributes stored as lists...
+
+        #unitCellList
+        unitCellObject = mantidCrystalStructure.getUnitCell()
+        self.unitCellList = [unitCellObject.a(),
+                   unitCellObject.b(),
+                   unitCellObject.c(),
+                   unitCellObject.alpha(),
+                   unitCellObject.beta(),
+                   unitCellObject.gamma()]
+        
+        #cellContentsList
+        cellContentsString = mantidCrystalStructure.getScatterers()
+        cellContentsList = [atm.split(' ') for atm in list(cellContentsString)]
+        self.cellContentsList = [[val if val.isalpha() else float(val) \
+                       for val in scatterer] for scatterer in cellContentsList]
+
+        #spaceGroupString
+        self.spaceGroupString = mantidCrystalStructure.getSpaceGroup().getHMSymbol()
+        
+    def makeMantidCrystal(self):
+
+        #returns a mantid CrystalStructure 
+        latticeParamsString = ''
+        for param in self.unitCellList:
+            latticeParamsString += f"{param} "
+
+        cellContentsString = "; ".join([f'{atom[0]} {atom[1]} {atom[2]} {atom[3]} {atom[4]} {atom[5]}' for atom in self.cellContentsList])
+        
+        mantidCrystalStructure = CrystalStructure(latticeParamsString,
+                                         self.spaceGroupString,
+                                         cellContentsString)
+
+        return mantidCrystalStructure
+
+class Box():
 
     '''class to hold list of peaks and their properties'''
 
@@ -45,7 +115,6 @@ class Box():
 
 
     def findCif(self):
-
 
         dirname = os.path.dirname(self.cifSpec)
 
@@ -103,37 +172,72 @@ class Box():
                 print("ERROR couldn\'t read this file: {self.cifSpec}")        
             
     def loadCif(self):
+
+
+        #Load cif into mantid workspace and get useful mantid object from this.
         CreateSampleWorkspace(OutputWorkspace='tmp')
         LoadCIF(Workspace='tmp',InputFile=self.cifFilePath)
         ws = mtd['tmp']
-        self._originalCrystal  = ws.sample().getCrystalStructure()
-        self._originalUnitCell = ws.sample().getCrystalStructure().getUnitCell()
-                
+        
+        #at point of loading make a copy of input crystal
+        inputCrystalStructure =ws.sample().getCrystalStructure()
+        inputCrystalList = parseMantidCrystal(inputCrystalStructure)
 
-        #get scatterers
-        self.cellContents = self._originalCrystal.getScatterers()
-        self._originalCellContents = self.parseCellContents()
-        self.processCrystal(self._originalCrystal)
-        # current values for lattice params are fresh from cif and unmodified. Keep a copy of these
-        self.a_orig = self.a
-        self.b_orig = self.b
-        self.c_orig = self.c
-        self.alpha_orig = self.alpha
-        self.beta_orig = self.beta
-        self.gamma_orig = self.gamma
+        #make a copy of input crystal as a mantid Crystal Structure
+        self._originalCrystal = inputCrystalList.makeMantidCrystal()
+
+        self.processCrystal(inputCrystalStructure)
 
         DeleteWorkspace(Workspace='tmp')
+
+    def sameCrystal(self,crystalStructure1,crystalStructure2):
+
+        #compares two mantid CrystalStructure objects and returns True if they have identical unitCells, spaceGroups and atomLists
+
+        #first convert mantid CrystalStructure to crystalList
+        crystal1 = parseMantidCrystal(crystalStructure1)
+        crystal2 = parseMantidCrystal(crystalStructure2)
+
+        #this was far harder than I though. Here I'm assuming the atoms never change their @order which seems not guaranteed. TODO: worry about this.
+        scattererCondition = []
+        for atomIndex,atom in enumerate(crystal1.cellContentsList):
+            atomSet1 = set(atom)
+            atomSet2 = set(crystal2.cellContentsList[atomIndex])
+            scattererCondition.append(atomSet1 == atomSet2)
+        scattererCondition = all(scattererCondition)
+
+        spaceGroupCondition = crystal1.spaceGroupString == crystal2.spaceGroupString
+
+        latticeSet1 = set(crystal1.unitCellList)
+        latticeSet2 = set(crystal2.unitCellList)
+        latticeCondition = latticeSet1 == latticeSet2
+
+        if scattererCondition and spaceGroupCondition and latticeCondition:
+            return True
+        else:
+            return False
     
-    
-    def processCrystal(self,crystal):
-   
-        unitCell = crystal.getUnitCell()
+    def processCrystal(self,crystalStructure):
+        
+        #Accepts a mantid Crystal Structure object and extracts useful attributes from it
+
+        # first check if crystal has been modified from original as read from cif
+        self.isModified = not self.sameCrystal(crystalStructure,
+                                                      self._originalCrystal)
+
+        #make lists of useful crystal parameters by parsing crystalStructure
+        self.crystalList = parseMantidCrystal(crystalStructure)
+        self.unitCellList = self.crystalList.unitCellList
+        self.cellContentsList =  self.crystalList.cellContentsList
+        self.nAtoms = len(self.cellContentsList)
 
         # some symmetry parameters
-        self.HMSymbol = crystal.getSpaceGroup().getHMSymbol()
-        self.pointGroup = crystal.getSpaceGroup().getPointGroup()
+        self.HMSymbol = crystalStructure.getSpaceGroup().getHMSymbol()
+        self.pointGroup = crystalStructure.getSpaceGroup().getPointGroup()
+        self.crystalSystem = str(self.pointGroup.getCrystalSystem())
         
         #define useful crystallographic attributes
+        unitCell = crystalStructure.getUnitCell()  
         self.a = unitCell.a()
         self.b = unitCell.b()
         self.c = unitCell.c()
@@ -149,10 +253,11 @@ class Box():
         self.gammastar = unitCell.gammastar()
 
         #JKH added to make use in cartesian hkl method
-        self.BMatrix = unitCell.getB()
-        
+        self.BMatrix = unitCell.getB() 
+
         #Generate reflections
-        generator = ReflectionGenerator(crystal)
+        generator = ReflectionGenerator(crystalStructure)
+        
         # Create list of unique reflections between 0.7 and 3.0 Angstrom
         hkls = generator.getUniqueHKLsUsingFilter(self.dMin, self.dMax, ReflectionConditionFilter.StructureFactor)
         # Calculate d and F^2
@@ -163,8 +268,8 @@ class Box():
         reflections = sorted([(hkl, d, fsq, len(self.pointGroup.getEquivalents(hkl))) for hkl, d, fsq in zip(hkls, dValues, fSquared)],
                                     key=lambda x: x[1] - x[0][0]*1e-6, reverse=True)
 
+        
         # create individual lists of reflection properties with shared order and useful names
-
         self.nRef = len(reflections)
         self.hkl = []
         self.dSpacing = []
@@ -178,17 +283,23 @@ class Box():
             self.mult.append(reflections[i][3])
             Amp = reflections[i][2]*reflections[i][3]*reflections[i][1]**4 #Fsq times multiplicity * d**4
             self.estInt.append(Amp)
-        
 
+        return
+        
     def summary(self):
+        print("Crystal summary:")
         print(f"\nCIF file: {self.cifFilePath}")
         print(f"phase nickname: {self.nickName}")
         print(f"Space Group: {self.HMSymbol}")
         print(f"a: {self.a:.4f} Ang, b: {self.b:.4f} Ang, c: {self.c:.4f} Ang")
         print(f"alp: {self.alpha:.1f} deg, beta: {self.beta:.1f} deg, gam: {self.gamma:.1f} deg")
         print(f"{self.nRef} reflections calculated")
-        print(f"First 10 reflections:")
-        for ref in range(self.nRef):
+        print(f"Atoms:")
+        for atom in self.cellContentsList:
+            print(atom)
+        print("Crystal has been modified: ",self.isModified)
+        print(f"First 3 reflections:")
+        for ref in range(3):
             print(f"{self.hkl[ref]} {self.dSpacing[ref]:4f} {self.mult[ref]} {self.fSq[ref]:.4f}")
 
     def tickWS(self,yVal):
@@ -205,84 +316,52 @@ class Box():
                         UnitX = 'd-Spacing')
         
     def scaleLattice(self,scaleFactor):
-        #includes code from Z. Morgan https://github.com/zjmorgan/NeuXtalViz/blob/main/src/NeuXtalViz/models/crystal_structure_tools.py
 
-        self.modifiedLattice = True
+        print("updating lattice parameters")
+
+        #scaleLattice: crude multiplication of original input a,b,c
         self.latticeScaleFactor = scaleFactor
-        # have to build a new CrystalStructure
-        # first need ingredients for this:
-        params = [self.a_orig*scaleFactor,
-                  self.b_orig*scaleFactor,
-                  self.c_orig*scaleFactor,
-                  self.alpha_orig,
-                  self.beta_orig,
-                  self.gamma_orig]
-        
-        print(params)
-        
-        scatterers = self.parseCellContents()
 
-        line = ' '.join(['{}']*6)
-        constants = line.format(*params)
+        originalCrystalList = parseMantidCrystal(self._originalCrystal)
+        originalUnitCellList = originalCrystalList.unitCellList
 
-        atom_info = ';'.join([line.format(*s) for s in scatterers])
+        #modify current crystalList with updated lattice parameters
+        self.crystalList.unitCellList = [scaleFactor*val for val in originalUnitCellList]
 
-        #then build CrystalStructure
-        crystal_mod = CrystalStructure(constants,self.HMSymbol, atom_info)
-
-        #now process this to update current crystal attributes
-        self.processCrystal(crystal_mod)
+        #build Crystal Structure from this
+        crystalMod=self.crystalList.makeMantidCrystal()
+        #and process this to update current values
+        self.processCrystal(crystalMod)
 
         #if workspace exists, need to update it with scaled d-spacings
         if self.tickWSExists:
             self.tickWS(self.tickWSyVal)
 
         return
-    
-    def parseCellContents(self):
-        #includes code from Z. Morgan https://github.com/zjmorgan/NeuXtalViz/blob/main/src/NeuXtalViz/models/crystal_structure_tools.py
-        print('Parsing contents of unit-cell')
-        scatterers = self.cellContents
-        scatterers = [atm.split(' ') for atm in list(scatterers)]
-        scatterers = [[val if val.isalpha() else float(val) \
-                       for val in scatterer] for scatterer in scatterers]
-        return scatterers
-          
 
-    def fixUiso(self):
-        contents=self.parseCellContents()
-        for i in range(0,len(contents)):
-            Mass = Atom(contents[i][0]).mass
-            #A factor of 10 is added here to make the F2 numbers less vanishingly small
-            contents[i][5] = 1/(30*np.sqrt(Mass))
+    def applyStandardUiso(self):
 
-        modifiedContents = "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in contents])
+        print("updating Uiso values...")
 
-        #Rebuild the crystal structure
-        latticeParams = f"{self.a} {self.b} {self.c} {self.alpha} {self.beta} {self.gamma}"
-        crystalMod = CrystalStructure(latticeParams, self.HMSymbol, modifiedContents)
-        #Update current crystal 
-        self.cellContents = crystalMod.getScatterers()
+        for atom in self.crystalList.cellContentsList:
+            print(atom)    
+
+        for atom in self.crystalList.cellContentsList:
+            Mass = Atom(atom[0]).mass
+            #factor of 30 empirically chosen to make the F2 numbers less vanishingly small
+            atom[5] = 1/(30*np.sqrt(Mass))
+
+        crystalMod = self.crystalList.makeMantidCrystal()
         self.processCrystal(crystalMod)
-    
-    def resetCell(self):
-        #Resets the crystal contents to those loaded from teh cif, lattice params, cell contents, and Uiso
-        #Call original cell and reformat back into correct form
-        oldCellContents = self._originalCellContents
-        modifiedContents = "; ".join([f'{scatterer[0]} {scatterer[1]} {scatterer[2]} {scatterer[3]} {scatterer[4]} {scatterer[5]}' for scatterer in oldCellContents])
-        #Rebuild the crystal structure and reset lattive parameters
-        latticeParams = f"{self._originalUnitCell.a()} {self._originalUnitCell.b()} {self._originalUnitCell.c()} {self._originalUnitCell.alpha()} {self._originalUnitCell.beta()} {self._originalUnitCell.gamma()}"
-        crystalMod = CrystalStructure(latticeParams, self.HMSymbol, modifiedContents)
-        #Update current crystal 
-        self.cellContents = crystalMod.getScatterers()
-        self.processCrystal(crystalMod)
-
-    def resetLattice(self):
-
-        self.modifiedLattice = False
-        self.scaleLattice(1.0)
-
+        
         return
+        
+    def reset(self):
+
+        #returns entire crystal to original as read from cif
+        self.processCrystal(self._originalCrystal)
+        return
+
     
     def plot(self,workspaceToPlot):
                         
@@ -329,28 +408,6 @@ class Box():
         self.dMax=dMax
         self.loadCif()
 
-    #########################################################################
-    #                           jasmineFunction                             #
-    #   jasmineFunction is the first function I made in here because I was  #
-    #   afraid of messing up Malcolm's code and was learning how commmits   #
-    #   and pull requests work. Now it's a monument and marker to my edits  #                     
-    #########################################################################
-
-    def jasmineFunction(self):
-        print("This is Jasmine's Function")
-    
-    #########################################################################
-    #                           defineSpaceGroup                            #
-    #   defineSpaceGroup is intended to pull the space group from the cif,  #
-    #   and create a point group from it. I found I was using it a lot in   #
-    #   other methods so I may add this method into those? Later note: I    #
-    #   tried this and I can't call a method I wrote in crystal box in here #
-    #########################################################################
-    
-    def defineSpaceGroup(self):
-        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
-        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
-        return pg
     
     #########################################################################
     #                           getEquivalents                              #
@@ -360,15 +417,10 @@ class Box():
     #########################################################################
 
     def getEquivalents(self, hkl):
-        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
-        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
 
-        equivalents = pg.getEquivalents(hkl)
-        
-        print(sg)
-        print(pg)
-        print("The equivalents of reflection", hkl, "include the following:", equivalents)
-        print ("Number of reflections equivalent to ", hkl, "is", len(equivalents[0]))
+        equivalents = self.pointGroup.getEquivalents(hkl)
+
+        return equivalents      
        
     #########################################################################
     #                           cartesianHKL                                #
@@ -382,9 +434,7 @@ class Box():
     
     def cartesianHKL(self,h):
 
-        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
-        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
-        crystalSystem = str(pg.getCrystalSystem())
+        crystalSystem = str(self.pointGroup.getCrystalSystem())
 
         if crystalSystem == "Cubic" or crystalSystem == "Orthorhombic" or crystalSystem == "Tetragonal":
             print("Crystal system is ", crystalSystem)
@@ -414,51 +464,23 @@ class Box():
               "otherwise your result will not be meaningful.",
               "Use method, 'cartesianHKL' to verify this.")
         
-        angle_rad_q_obs = np.arccos(np.dot(vector1,vector2)/(np.linalg.norm(vector1)*
+        # ensure vectors use cartesian metric
+
+        if self.crystalSystem == "Cubic" or self.crystalSystem == "Orthorhombic" or self.crystalSystem == "Tetragonal":
+            self.isCartesian = True
+        else:
+            self.isCartesianm = False
+            vector1 = np.matmul(self.BMatrix,vector1)
+            vector2 = np.matmul(self.BMatrix,vector2)
+            print("NOTICE: vectors converted to cartesian")
+        
+        angleBetweenVectors = np.arccos(np.dot(vector1,vector2)/(np.linalg.norm(vector1)*
             np.linalg.norm(vector2)))
-        angle_deg_q_obs = np.degrees(angle_rad_q_obs)
         
-        print ("Input vectors were", vector1,"and", vector2,
-               ". The angle between these two vectors is", angle_deg_q_obs, "degrees.")
-        print("Angle is in degrees =", degrees)
-        #self.loadCif()
-        self.loadCifNormUiso()
-
-    def getEquivalents(self, hkl):
-        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
-        pg = PointGroupFactory.createPointGroupFromSpaceGroup(sg)
+        if degrees:
+            angleBetweenVectors = np.degrees(angleBetweenVectors)
         
-        equivalents = pg.getEquivalents(hkl)
-        
-        print(sg)
-        print(pg)
-        print("The equivalents of reflection", hkl, "include the following:", equivalents)    
-
-        return #angle_deg_q_obs                
-    
-    #########################################################################
-    #                           makeCrystal                                 #
-    #   this is where I would put my description of this method             #
-    #   ...if I had one!!                                                   #
-    #(https://imgflip.com/s/meme/This-Is-Where-Id-Put-My-Trophy-If-I-Had-One.jpg)#
-    #   (this is a work in progress in other words),                        #
-    #########################################################################
-    
-    def makeCrystal(self):
-        params = [self.a_orig,
-                  self.b_orig,
-                  self.c_orig,
-                  self.alpha_orig,
-                  self.beta_orig,
-                  self.gamma_orig]
-        #print(params)
-        line = ' '.join(['{}']*6)
-        constants = line.format(*params)
-        scatterers = self.get_scatterers()
-        atom_info = ';'.join([line.format(*s) for s in scatterers])
-        crystal_structure = CrystalStructure(constants,self.HMSymbol, atom_info)
-        
-        return crystal_structure 
+        return angleBetweenVectors 
         
 def showNicknames():
     print('available nicknames are:')
