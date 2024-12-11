@@ -338,6 +338,13 @@ class Box():
             self.tickWS(self.tickWSyVal)
 
         return
+    
+    def calcFOM(self):
+
+        #a generalised figure of merit assessing how crystallographically challenging a 
+        #material is
+
+        
 
     def applyStandardUiso(self):
 
