@@ -276,6 +276,7 @@ class Box():
         self.fSq = []
         self.mult = []
         self.estInt = []
+        self.totalIntensityInRange = 0
         for i in range(self.nRef):
             self.hkl.append(reflections[i][0])
             self.dSpacing.append(reflections[i][1])
@@ -283,6 +284,7 @@ class Box():
             self.mult.append(reflections[i][3])
             Amp = reflections[i][2]*reflections[i][3]*reflections[i][1]**4 #Fsq times multiplicity * d**4
             self.estInt.append(Amp)
+            self.totalIntensityInRange += Amp/self.volume
 
         return
         
@@ -341,17 +343,27 @@ class Box():
     
     def calcFOM(self):
 
-        #a generalised figure of merit assessing how crystallographically challenging a 
-        #material is
+        #FOM is a generalised figure of merit assessing how crystallographically #challenging a material is
 
+        self.dMin = 0.5
+        self.dMax = 5.0
+        self.applyStandardUiso()
+        FOM = self.totalIntensityInRange/self.nRef
+        self.FOM1 = FOM/548.881 #normalised to value for diamond
+
+        # print(f"FOM is: {self.FOM1}")
+
+        #a second FOM assessess total absorption and incoherent cross sections.
+        AIFOM = self.calcIncAbsFactor()
+        self.FOM2 = AIFOM/0.0007931 #normalised to value for diamond
+        # print(f"Abs Inc FOM is: {self.FOM2}")
+        return self.FOM1,self.FOM2
         
 
     def applyStandardUiso(self):
 
-        print("updating Uiso values...")
+        # print("updating Uiso values...")
 
-        for atom in self.crystalList.cellContentsList:
-            print(atom)    
 
         for atom in self.crystalList.cellContentsList:
             Mass = Atom(atom[0]).mass
