@@ -355,6 +355,28 @@ class Box():
         self.processCrystal(crystalMod)
         
         return
+    
+    def calcIncAbsFactor(self):
+        #Calculates a numerical factor to assist in determining how 'well' as sample scatters
+        #A large returned number from this calculator will scatter less well than a lower number structure.
+        contents=self.cellContentsList
+        sg = SpaceGroupFactory.createSpaceGroup(self.HMSymbol)
+        factor = 0
+        for i in range(0,len(contents)):
+            xCoord = contents[i][1]
+            yCoord = contents[i][2]
+            zCoord = contents[i][3]
+            siteOcc = contents[i][4]
+            position = [xCoord, yCoord, zCoord]
+            siteMult = len(sg.getEquivalentPositions(position))
+            atom = Atom(contents[i][0])
+            incXS = atom.neutron()['inc_scatt_xs']
+            absXS = atom.neutron()['abs_xs']
+            #The factor is the sum of the site multiplicity multiplied by the occupancy and (inc+abs) factor for every atom in the cell.
+            factor += siteMult * siteOcc * (incXS + absXS)
+        #The factor is scaled by the cell volume. A larger cell with the same number of atoms has a lower density of scatterers (absorption or inc).
+        factor = factor / self.volume
+        return factor   
         
     def reset(self):
 

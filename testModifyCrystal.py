@@ -58,3 +58,39 @@ if crystal.isModified:
 else:
     print("Crystal is unmmodified")
     crystal.summary
+
+#4. Modify Uiso and check this works
+
+print("\nTEST 4: convert original uiso to \"standardised value\" \n")
+crystal.applyStandardUiso()
+#check again
+if crystal.isModified:
+    print("crystal structure has been modified")
+    crystal.summary()
+else:
+    print("Crystal is unmmodified")
+    crystal.summary
+
+#5. Again Reset crystal and check this works
+print("\nTEST 5: resetting crystal \n")
+crystal.reset()
+#check again
+if crystal.isModified:
+    print("crystal structure has been modified")
+    crystal.summary()
+else:
+    print("Crystal is unmmodified")
+    crystal.summary
+
+#6. check that calcIncAbsFactor works
+
+print("\nTEST 6: Calculate calcIncAbsFactor \n")
+crystal.calcIncAbsFactor()
+print(f"AbsInc factor is: {crystal.calcIncAbsFactor()}")
+#check again
+if crystal.isModified:
+    print("crystal structure has been modified")
+    crystal.summary()
+else:
+    print("Crystal is unmmodified")
+    crystal.summary
